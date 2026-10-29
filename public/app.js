@@ -97,18 +97,17 @@ function renderHome() {
   $('#lastAt').textContent = last ? when(last.ts) : '';
 }
 
-$('#record').onclick = () => {
-  const rec = { id: uid(), ts: Date.now(), bristol: null, feeling: null };
-  upsert(rec);
+// 只打开面板；点「完成」才保存，取消或点遮罩不会留下空记录
+$('#record').onclick = () => openSheet('new', { id: uid(), ts: Date.now(), bristol: null, feeling: null });
+
+function celebrate() {
   navigator.vibrate?.(10);
   navigator.storage?.persist?.();
   const btn = $('#record');
   btn.classList.add('done');
   $('#recordLabel').textContent = '已记录';
   setTimeout(() => { btn.classList.remove('done'); $('#recordLabel').textContent = '记录'; }, 1200);
-  renderHome();
-  openSheet('new', rec);
-};
+}
 
 /* ---------- 详情面板 ---------- */
 
@@ -116,9 +115,9 @@ let draft, mode;
 function openSheet(m, rec) {
   mode = m;
   draft = { ...rec };
-  $('#sheetTitle').textContent = { new: '已记录', edit: '编辑记录', add: '补录' }[m];
-  $('#sheetLeft').textContent = m === 'add' ? '取消' : '删除';
-  $('#sheetLeft').classList.toggle('danger', m !== 'add');
+  $('#sheetTitle').textContent = { new: '新记录', edit: '编辑记录', add: '补录' }[m];
+  $('#sheetLeft').textContent = m === 'edit' ? '删除' : '取消';
+  $('#sheetLeft').classList.toggle('danger', m === 'edit');
   $('#doneBtn').textContent = m === 'add' ? '添加' : '完成';
   $('#timeInput').value = hm(draft.ts);
   paintPicks();
@@ -150,16 +149,17 @@ function closeSheet(commit) {
     if (!isNaN(h)) draft.ts = new Date(draft.ts).setHours(h, m, 0, 0);
     if (draft.ts > Date.now()) return alert('时间不能晚于现在');
     upsert(draft);
+    if (mode === 'new') celebrate();
   }
   $('#sheet').hidden = true;
   render();
 }
 $('#sheetForm').onsubmit = e => { e.preventDefault(); closeSheet(true); };
-// 点遮罩：已存在的记录保存修改；补录视为取消
-$('.backdrop').onclick = () => closeSheet(mode !== 'add');
+// 点遮罩 = 取消，不保存任何改动
+$('.backdrop').onclick = () => closeSheet(false);
 $('#sheetLeft').onclick = () => {
-  if (mode === 'add') return closeSheet(false);
-  if (mode === 'edit' && !confirm('删除这条记录？')) return;
+  if (mode !== 'edit') return closeSheet(false);
+  if (!confirm('删除这条记录？')) return;
   remove(draft.id);
   closeSheet(false);
 };
@@ -190,12 +190,13 @@ function renderCalendar() {
   const sd = new Date(selDay), list = records.filter(r => startOfDay(r.ts) === selDay);
   $('#dayLabel').textContent = `${md(selDay)} 星期${WEEK[sd.getDay()]} · ${list.length} 次`;
   $('#dayList').innerHTML = list.length
-    ? list.map(r => {
+    ? list.map((r, i) => {
         const g = groupOf(r.bristol);
         const sub = [r.bristol && `${r.bristol}型`, FEELING[r.feeling]].filter(Boolean).join(' · ') || '未填写详情';
-        return `<li><button class="row rec" data-id="${r.id}">
+        return `<li class="swipe"><button class="swipe-del" data-del="${r.id}">删除</button>
+          <button class="row rec" data-id="${r.id}">
           <span class="badge" style="background:${g ? g.color : 'var(--gray)'}">${r.bristol || '–'}</span>
-          <span class="rec-main"><span>${r.bristol ? BRISTOL[r.bristol][0] : '未填形状'}</span><small>${sub}</small></span>
+          <span class="rec-main"><span>Happy poop💩${i ? ' again' : ''}</span><small>${sub}</small></span>
           <span class="rec-time">${hm(r.ts)}</span>${CHEV}</button></li>`;
       }).join('')
     : '<li><div class="row empty-row">无记录</div></li>';
@@ -220,9 +221,48 @@ $('#todayBtn').onclick = () => {
   selDay = startOfDay(Date.now());
   renderCalendar();
 };
+// 左滑记录露出尾部的「删除」按钮（同一时间只展开一条）
+const SWIPE_OPEN = -84;
+let swipe = null;
+const setX = (row, x) => { row.style.transform = x ? `translateX(${x}px)` : ''; };
+const closeSwipes = except => document.querySelectorAll('.rec.open').forEach(r => {
+  if (r !== except) { r.classList.remove('open'); setX(r, 0); }
+});
+$('#dayList').addEventListener('pointerdown', e => {
+  const row = e.target.closest('.rec');
+  if (row) swipe = { row, x0: e.clientX, base: row.classList.contains('open') ? SWIPE_OPEN : 0, moved: false };
+});
+$('#dayList').addEventListener('pointermove', e => {
+  if (!swipe) return;
+  const dx = e.clientX - swipe.x0;
+  if (!swipe.moved && Math.abs(dx) < 8) return;
+  swipe.moved = true;
+  swipe.row.classList.add('dragging');
+  setX(swipe.row, Math.min(0, Math.max(SWIPE_OPEN * 1.3, swipe.base + dx)));
+});
+const endSwipe = e => {
+  if (!swipe) return;
+  const { row, x0, base, moved } = swipe;
+  swipe = null;
+  row.classList.remove('dragging');
+  if (!moved) return;
+  const open = e.type === 'pointerup' ? base + e.clientX - x0 < SWIPE_OPEN / 2 : base !== 0;
+  row.classList.toggle('open', open);
+  setX(row, open ? SWIPE_OPEN : 0);
+  if (open) closeSwipes(row);
+  row.dataset.swiped = Date.now(); // 吞掉松手后紧跟的那次点击
+};
+$('#dayList').addEventListener('pointerup', endSwipe);
+$('#dayList').addEventListener('pointercancel', endSwipe);
+
 $('#dayList').onclick = e => {
-  const b = e.target.closest('[data-id]');
-  if (b) openSheet('edit', records.find(r => r.id === b.dataset.id));
+  const del = e.target.closest('[data-del]');
+  if (del) { remove(del.dataset.del); return renderCalendar(); }
+  const row = e.target.closest('.rec');
+  if (!row) return;
+  if (Date.now() - (row.dataset.swiped || 0) < 400) return;
+  if (document.querySelector('.rec.open')) return closeSwipes(); // 有展开的行时，点一下先收起
+  openSheet('edit', records.find(r => r.id === row.dataset.id));
 };
 $('#addBtn').onclick = () => {
   const ts = selDay === startOfDay(Date.now()) ? Date.now() : new Date(selDay).setHours(12);

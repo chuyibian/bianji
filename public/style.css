@@ -118,7 +118,12 @@ button.row:active { background: var(--press); }
 .grid .future .num { color: var(--label3); }
 .grid .sel .num, .grid .sel:active .num { background: var(--brand); color: var(--label); font-weight: 700; }
 
-.rec { padding-top: 10px; padding-bottom: 10px; }
+.rec { padding-top: 10px; padding-bottom: 10px; background: var(--card); touch-action: pan-y; transition: transform .25s var(--ease), background .15s; }
+.rec.row:active { background: color-mix(in srgb, var(--card), #000 5%); }
+.rec.dragging { transition: none; }
+.swipe { position: relative; overflow: hidden; }
+.swipe-del { position: absolute; top: 0; right: 0; bottom: 0; width: 84px; background: var(--red); color: #fff; font-size: 15px; font-weight: 600; }
+.swipe-del:active { filter: brightness(.9); }
 .group > li + li > .rec::before { left: 58px; }
 .badge { width: 30px; height: 30px; border-radius: var(--r-sm); display: grid; place-items: center; color: #fff; font-family: var(--rounded); font-size: 15px; font-weight: 700; flex: none; }
 .badge.sm { width: 22px; height: 22px; border-radius: 6px; font-size: 12px; }

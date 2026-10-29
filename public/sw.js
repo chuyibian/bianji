@@ -1,5 +1,5 @@
 // 先返回缓存（离线可用），同时在后台拉取最新版本更新缓存，下次打开即生效
-const CACHE = 'bianji-v4';
+const CACHE = 'bianji-v5';
 const ASSETS = [
   './', 'index.html', 'style.css', 'app.js', 'manifest.webmanifest',
   'icons/icon.svg', 'icons/cat.svg', 'icons/icon-192.png', 'icons/icon-512.png', 'icons/apple-touch-icon.png',
