@@ -26,9 +26,9 @@ cd /Users/chuyibian/Projects/poop && git add -A && git commit -m "更新" && git
 ```
 
 - 推送后，GitHub Actions 会自动把 `public/` 发布出去，大约 1 分钟完成。可以在仓库的 **Actions** 页面查看进度。
-- GitHub Pages 对所有文件统一缓存 10 分钟，所以推送后最多等 10 分钟新文件才能下载到。
-- 手机上：打开 app 一次，它会在后台下载新版本，**第二次打开时生效**。
-- 修改了 CSS 或 JS 的话，顺手把 `public/sw.js` 第 2 行的版本号加一（例如 `bianji-v4` → `bianji-v5`），这样旧缓存会被清掉。
+- **每次发布都要把 `public/sw.js` 第 3 行的版本号加一**（例如 `bianji-v7` → `bianji-v8`）。手机正是靠这个版本号的变化发现新版本的。
+- 手机上：只要联网，每次打开或切回 app 都会检查新版本；发现后自动刷新一次，不需要做任何操作。离线时使用上次缓存的版本。
+- 想确认手机上是哪个版本：看「数据」页最底部的「版本 bianji-vN」。
 
 ## 如何运作
 

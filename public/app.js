@@ -421,4 +421,15 @@ $('#importFile').onchange = async e => {
 /* ---------- 启动 ---------- */
 
 route();
-if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js');
+if ('serviceWorker' in navigator) {
+  const hadController = !!navigator.serviceWorker.controller;
+  navigator.serviceWorker.register('sw.js').then(reg => {
+    // 主屏幕 app 切回前台时并不会重新加载页面，所以每次回到前台都检查一次新版本
+    document.addEventListener('visibilitychange', () => { if (!document.hidden) reg.update(); });
+  });
+  // 新版本接管后自动刷新一次；正在填写记录时不打断
+  navigator.serviceWorker.addEventListener('controllerchange', () => {
+    if (hadController && $('#sheet').hidden) location.reload();
+  });
+}
+window.caches?.keys().then(k => { $('#version').textContent = `版本 ${k.find(n => n.startsWith('bianji-')) || '—'}`; });
