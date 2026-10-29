@@ -1,5 +1,6 @@
 'use strict';
 
+const VERSION = 'v8'; // 发布时与 sw.js 里的 CACHE 一起加一
 const KEY = 'bianji.records.v1';
 const BRISTOL = [null,
   ['分离硬块', '便秘'], ['结块香肠状', '轻度便秘'], ['表面有裂纹', '正常'], ['光滑柔软', '理想'],
@@ -432,4 +433,4 @@ if ('serviceWorker' in navigator) {
     if (hadController && $('#sheet').hidden) location.reload();
   });
 }
-window.caches?.keys().then(k => { $('#version').textContent = `版本 ${k.find(n => n.startsWith('bianji-')) || '—'}`; });
+$('#version').textContent = `版本 ${VERSION}`;
