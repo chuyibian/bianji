@@ -115,7 +115,7 @@
 | 存储 | `localStorage`，单个 key 存 JSON 数组 | 数据量很小（每年约 500 条，不到 50KB），API 最简单；在 iOS 上它与 IndexedDB 受同样的清理策略约束，真正的防丢靠导出备份和 `navigator.storage.persist()` |
 | 图表 | 手写 SVG/CSS 柱状图 | 只有柱状图和占比条，不值得引入图表库 |
 | 视觉 | 参照 Apple 健康：大标题、分组白卡片、圆体数字配灰色小单位、带网格线和顶部读数的图表、iOS 风格的底部面板；主色用 iOS systemBrown，配色都取自 iOS 系统色 | 访谈问题 10，v2 改版 |
-| 部署 | 腾讯 EdgeOne Makers，加速区域选「全球（不含中国大陆）」，用默认项目域名，不绑自定义域名，仅供个人使用 | 访谈问题 9，教程见 `docs/DEPLOY-EdgeOne.md` |
+| 部署 | GitHub Pages（https://chuyibian.github.io/bianji/），推送到 `main` 后由 GitHub Actions 自动发布 `public/`；默认网址固定且一定可以直接访问，仅供个人使用。EdgeOne 作为备选，见 `docs/DEPLOY-EdgeOne.md` | 用户在中国大陆以外，见 `docs/DEPLOY-GitHub-Pages.md` |
 
 ## 7. 待定问题
 
