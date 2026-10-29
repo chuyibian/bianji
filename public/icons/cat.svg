@@ -1,0 +1,43 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 224">
+  <g stroke="#1e1e1e" stroke-width="3" stroke-linejoin="round" stroke-linecap="round">
+    <!-- 水箱 -->
+    <rect x="116" y="96" width="50" height="58" rx="7" fill="#f4ead7"/>
+    <rect x="110" y="88" width="62" height="11" rx="5" fill="#f4ead7"/>
+    <path d="M150 112h8" fill="none"/>
+    <!-- 马桶 -->
+    <path d="M42 154q4 34 38 40l5 20h38l5-20q34-6 38-40z" fill="#f4ead7"/>
+    <ellipse cx="104" cy="154" rx="62" ry="13" fill="#f4ead7"/>
+  </g>
+  <ellipse cx="104" cy="218" rx="44" ry="4" fill="#1e1e1e" opacity=".1"/>
+
+  <!-- 尾巴 -->
+  <path d="M74 146c-30 2-38-22-24-38" fill="none" stroke="#1e1e1e" stroke-width="9" stroke-linecap="round"/>
+  <!-- 身体 -->
+  <path d="M70 156c-8-34 4-60 32-62 28 2 40 28 32 62z" fill="#1e1e1e"/>
+  <path d="M88 104c4 22 9 36 14 44 5-8 10-22 14-44z" fill="#fff"/>
+  <ellipse cx="90" cy="155" rx="10" ry="6" fill="#fff" stroke="#1e1e1e" stroke-width="2"/>
+  <ellipse cx="114" cy="155" rx="10" ry="6" fill="#fff" stroke="#1e1e1e" stroke-width="2"/>
+
+  <!-- 头 -->
+  <path d="M72 58 74 30l18 16zM132 58l-2-28-18 16z" fill="#1e1e1e"/>
+  <path d="M77 50 78 37l8 8zM127 50l-1-13-8 8z" fill="#f2958d"/>
+  <ellipse cx="102" cy="70" rx="35" ry="28" fill="#1e1e1e"/>
+  <path d="M86 86c0-8 7-13 16-13s16 5 16 13c0 9-7 15-16 15s-16-6-16-15z" fill="#fff"/>
+  <path d="M100 52l2 13 2-13z" fill="#fff"/>
+  <!-- 眼睛 -->
+  <circle cx="88" cy="64" r="9" fill="#fff"/>
+  <circle cx="116" cy="64" r="9" fill="#fff"/>
+  <circle cx="89" cy="65" r="4.2" fill="#1e1e1e"/>
+  <circle cx="115" cy="65" r="4.2" fill="#1e1e1e"/>
+  <!-- 鼻子 嘴 胡须 -->
+  <path d="M98 81h8l-4 5z" fill="#f2958d"/>
+  <path d="M97 94q5-4 10 0" fill="none" stroke="#1e1e1e" stroke-width="2" stroke-linecap="round"/>
+  <path d="M87 87 58 82M87 92 59 95M117 87l29-5M117 92l28 3" stroke="#1e1e1e" stroke-width="1.6" stroke-linecap="round"/>
+
+  <!-- 头顶的卷纸 -->
+  <g stroke="#1e1e1e" stroke-width="3" stroke-linejoin="round">
+    <path d="M88 18v26q14 6 28 0V18z" fill="#fff"/>
+    <ellipse cx="102" cy="18" rx="14" ry="4.5" fill="#fff"/>
+  </g>
+  <ellipse cx="102" cy="18" rx="4" ry="1.6" fill="#1e1e1e"/>
+</svg>

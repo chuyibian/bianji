@@ -1,0 +1,384 @@
+'use strict';
+
+const KEY = 'bianji.records.v1';
+const BRISTOL = [null,
+  ['分离硬块', '便秘'], ['结块香肠状', '轻度便秘'], ['表面有裂纹', '正常'], ['光滑柔软', '理想'],
+  ['软团块', '正常偏软'], ['糊状', '轻度腹泻'], ['水样', '腹泻'],
+];
+const FEELING = { smooth: '顺畅', strain: '费力', pain: '疼痛' };
+const FEEL_COLOR = { smooth: 'var(--teal)', strain: 'var(--sand)', pain: 'var(--red)' };
+const GROUPS = [
+  { name: '偏干', range: '1–2 型', types: [1, 2], color: 'var(--sand)', tip: '偏干时可多喝水、多吃蔬果和全谷物，并保持活动。' },
+  { name: '正常', range: '3–5 型', types: [3, 4, 5], color: 'var(--teal)' },
+  { name: '偏稀', range: '6–7 型', types: [6, 7], color: 'var(--slate)', tip: '偏稀时注意饮食卫生、及时补水；持续数日请就医。' },
+];
+const groupOf = b => GROUPS.find(g => g.types.includes(b));
+const GLYPH = [null,
+  '<circle cx="9" cy="13" r="4.5"/><circle cx="20" cy="9.5" r="4"/><circle cx="30" cy="14" r="4.5"/><circle cx="39" cy="10" r="3"/>',
+  '<circle cx="9" cy="12" r="5.5"/><circle cx="17" cy="11" r="5.5"/><circle cx="25" cy="13" r="5.5"/><circle cx="33" cy="12" r="5.5"/>',
+  '<rect x="3" y="7" width="38" height="10" rx="5"/><path class="crack" d="M12 7v3.5M20 17v-3.5M27 7v4M34 17v-3.5" stroke-width="1.6"/>',
+  '<path d="M6 15c6-7 12 2 17-3s10-5 15-1" fill="none" stroke="currentColor" stroke-width="7" stroke-linecap="round"/>',
+  '<ellipse cx="9" cy="13" rx="6.5" ry="4.5"/><ellipse cx="22" cy="11" rx="6" ry="4.5"/><ellipse cx="35" cy="13" rx="6.5" ry="4.5"/>',
+  '<path d="M4 16c0-4 4-6 7-4 1-4 7-5 9-1 2-3 8-3 9 1 3-2 8 0 8 4 0 3-3 4-6 3-2 2-6 2-8 0-3 2-7 2-9 0-4 1-10 1-10-3z"/>',
+  '<path d="M4 12c3 0 3-2.5 6-2.5s3 2.5 6 2.5 3-2.5 6-2.5 3 2.5 6 2.5 3-2.5 6-2.5 3 2.5 6 2.5" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/><ellipse cx="22" cy="18" rx="18" ry="3.5" opacity=".4"/>',
+];
+const CHEV = '<svg class="chev" viewBox="0 0 8 13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m1.5 1.5 5 5-5 5"/></svg>';
+
+/* ---------- 存储 ---------- */
+
+let records = load();
+function load() {
+  try { return JSON.parse(localStorage.getItem(KEY)) || []; } catch { return []; }
+}
+function save() {
+  records.sort((a, b) => a.ts - b.ts);
+  localStorage.setItem(KEY, JSON.stringify(records));
+}
+function upsert(rec) {
+  const i = records.findIndex(r => r.id === rec.id);
+  if (i < 0) records.push(rec); else records[i] = rec;
+  save();
+}
+function remove(id) {
+  records = records.filter(r => r.id !== id);
+  save();
+}
+const uid = () => Date.now().toString(36) + '-' + Math.random().toString(36).slice(2, 6);
+
+/* ---------- 工具 ---------- */
+
+const $ = s => document.querySelector(s);
+const pad = n => String(n).padStart(2, '0');
+const hm = t => { const d = new Date(t); return pad(d.getHours()) + ':' + pad(d.getMinutes()); };
+const startOfDay = t => new Date(t).setHours(0, 0, 0, 0);
+const addDays = (t, n) => { const d = new Date(t); d.setDate(d.getDate() + n); return d.getTime(); };
+const WEEK = '日一二三四五六';
+const md = t => { const d = new Date(t); return `${d.getMonth() + 1}月${d.getDate()}日`; };
+const ym = t => { const d = new Date(t); return `${d.getFullYear()}年${d.getMonth() + 1}月`; };
+const pct = (n, total) => (total ? Math.round(n / total * 100) : 0) + '%';
+
+// 今天 14:48 / 昨天 08:10 / 10月21日 09:30
+function when(t) {
+  const diff = Math.round((startOfDay(Date.now()) - startOfDay(t)) / 864e5);
+  return (diff === 0 ? '今天' : diff === 1 ? '昨天' : md(t)) + ' ' + hm(t);
+}
+// 时长 → N天N小时；不足一天只计小时
+function since(ms) {
+  const h = Math.floor(ms / 36e5), d = Math.floor(h / 24);
+  return d ? [[d, '天'], [h % 24, '小时']] : [[h, '小时']];
+}
+const metric = parts => parts.map(([v, u]) => `${v}<small>${u}</small>`).join('');
+const plain = parts => parts.map(([v, u]) => v + u).join('');
+const chartHead = (label, value, sub) =>
+  `<div class="chart-label">${label}</div><div class="metric">${value ?? '<span class="empty">暂无数据</span>'}</div><div class="chart-sub">${sub}</div>`;
+
+/* ---------- 路由 ---------- */
+
+const VIEWS = { '': 'home', calendar: 'calendar', data: 'data' };
+let view = 'home';
+function route() {
+  view = VIEWS[location.hash.replace(/^#\/?/, '')] || 'home';
+  document.querySelectorAll('.view').forEach(v => { v.hidden = v.id !== view; });
+  render();
+  scrollTo(0, 0);
+}
+function render() {
+  ({ home: renderHome, calendar: renderCalendar, data: renderData })[view]();
+}
+addEventListener('hashchange', route);
+document.addEventListener('visibilitychange', () => { if (!document.hidden) render(); });
+setInterval(() => { if (view === 'home' && !document.hidden) renderHome(); }, 30e3);
+
+/* ---------- 首页 ---------- */
+
+function renderHome() {
+  const now = new Date(), last = records.at(-1);
+  $('#sinceValue').innerHTML = last ? metric(since(now - last.ts)) : '<span class="empty">暂无记录</span>';
+  $('#lastAt').textContent = last ? when(last.ts) : '';
+}
+
+$('#record').onclick = () => {
+  const rec = { id: uid(), ts: Date.now(), bristol: null, feeling: null };
+  upsert(rec);
+  navigator.vibrate?.(10);
+  navigator.storage?.persist?.();
+  const btn = $('#record');
+  btn.classList.add('done');
+  $('#recordLabel').textContent = '已记录';
+  setTimeout(() => { btn.classList.remove('done'); $('#recordLabel').textContent = '记录'; }, 1200);
+  renderHome();
+  openSheet('new', rec);
+};
+
+/* ---------- 详情面板 ---------- */
+
+let draft, mode;
+function openSheet(m, rec) {
+  mode = m;
+  draft = { ...rec };
+  $('#sheetTitle').textContent = { new: '已记录', edit: '编辑记录', add: '补录' }[m];
+  $('#sheetLeft').textContent = m === 'add' ? '取消' : '删除';
+  $('#sheetLeft').classList.toggle('danger', m !== 'add');
+  $('#doneBtn').textContent = m === 'add' ? '添加' : '完成';
+  $('#timeInput').value = hm(draft.ts);
+  paintPicks();
+  $('#sheet').hidden = false;
+}
+function paintPicks() {
+  $('#bristolPick').innerHTML = BRISTOL.slice(1).map(([name], i) =>
+    `<button type="button" data-b="${i + 1}" aria-pressed="${draft.bristol === i + 1}">
+      <svg viewBox="0 0 44 24" fill="currentColor">${GLYPH[i + 1]}</svg><b>${i + 1}型</b><span>${name}</span></button>`).join('');
+  $('#feelingPick').innerHTML = Object.entries(FEELING).map(([k, v]) =>
+    `<button type="button" data-f="${k}" aria-pressed="${draft.feeling === k}"><i style="background:${FEEL_COLOR[k]}"></i><b>${v}</b></button>`).join('');
+}
+// 再点一次已选项 = 取消选择
+$('#bristolPick').onclick = e => {
+  const b = e.target.closest('[data-b]');
+  if (!b) return;
+  draft.bristol = draft.bristol === +b.dataset.b ? null : +b.dataset.b;
+  paintPicks();
+};
+$('#feelingPick').onclick = e => {
+  const b = e.target.closest('[data-f]');
+  if (!b) return;
+  draft.feeling = draft.feeling === b.dataset.f ? null : b.dataset.f;
+  paintPicks();
+};
+function closeSheet(commit) {
+  if (commit) {
+    const [h, m] = $('#timeInput').value.split(':').map(Number);
+    if (!isNaN(h)) draft.ts = new Date(draft.ts).setHours(h, m, 0, 0);
+    if (draft.ts > Date.now()) return alert('时间不能晚于现在');
+    upsert(draft);
+  }
+  $('#sheet').hidden = true;
+  render();
+}
+$('#sheetForm').onsubmit = e => { e.preventDefault(); closeSheet(true); };
+// 点遮罩：已存在的记录保存修改；补录视为取消
+$('.backdrop').onclick = () => closeSheet(mode !== 'add');
+$('#sheetLeft').onclick = () => {
+  if (mode === 'add') return closeSheet(false);
+  if (mode === 'edit' && !confirm('删除这条记录？')) return;
+  remove(draft.id);
+  closeSheet(false);
+};
+
+/* ---------- 日历 ---------- */
+
+let calMonth = new Date(new Date().setDate(1)).setHours(0, 0, 0, 0);
+let selDay = startOfDay(Date.now());
+
+function renderCalendar() {
+  const m = new Date(calMonth), y = m.getFullYear(), mo = m.getMonth();
+  const today = startOfDay(Date.now());
+  const counts = {};
+  for (const r of records) { const k = startOfDay(r.ts); counts[k] = (counts[k] || 0) + 1; }
+
+  const days = new Date(y, mo + 1, 0).getDate();
+  let html = '<span></span>'.repeat((m.getDay() + 6) % 7), monthTotal = 0;
+  for (let d = 1; d <= days; d++) {
+    const t = new Date(y, mo, d).getTime(), n = counts[t] || 0;
+    monthTotal += n;
+    const cls = [t === today && 'today', t > today && 'future', t === selDay && 'sel'].filter(Boolean).join(' ');
+    html += `<button data-t="${t}" class="${cls}" aria-label="${mo + 1}月${d}日 ${n}次"><span class="num">${d}</span><span class="dots">${'<i></i>'.repeat(Math.min(n, 3))}</span></button>`;
+  }
+  $('#grid').innerHTML = html;
+  $('#monthLabel').textContent = ym(calMonth);
+  $('#monthCount').textContent = `本月共 ${monthTotal} 次`;
+
+  const sd = new Date(selDay), list = records.filter(r => startOfDay(r.ts) === selDay);
+  $('#dayLabel').textContent = `${md(selDay)} 星期${WEEK[sd.getDay()]} · ${list.length} 次`;
+  $('#dayList').innerHTML = list.length
+    ? list.map(r => {
+        const g = groupOf(r.bristol);
+        const sub = [r.bristol && `${r.bristol}型`, FEELING[r.feeling]].filter(Boolean).join(' · ') || '未填写详情';
+        return `<li><button class="row rec" data-id="${r.id}">
+          <span class="badge" style="background:${g ? g.color : 'var(--gray)'}">${r.bristol || '–'}</span>
+          <span class="rec-main"><span>${r.bristol ? BRISTOL[r.bristol][0] : '未填形状'}</span><small>${sub}</small></span>
+          <span class="rec-time">${hm(r.ts)}</span>${CHEV}</button></li>`;
+      }).join('')
+    : '<li><div class="row empty-row">无记录</div></li>';
+  $('#addBtn').disabled = selDay > today;
+}
+$('#grid').onclick = e => {
+  const b = e.target.closest('[data-t]');
+  if (b) { selDay = +b.dataset.t; renderCalendar(); }
+};
+const shiftMonth = n => { const m = new Date(calMonth); calMonth = new Date(m.getFullYear(), m.getMonth() + n, 1).getTime(); renderCalendar(); };
+$('#prevMonth').onclick = () => shiftMonth(-1);
+$('#nextMonth').onclick = () => shiftMonth(1);
+// 左右滑动切换月份
+let touchX = null;
+$('#grid').addEventListener('touchstart', e => { touchX = e.touches[0].clientX; }, { passive: true });
+$('#grid').addEventListener('touchend', e => {
+  const dx = e.changedTouches[0].clientX - touchX;
+  if (Math.abs(dx) > 50) shiftMonth(dx < 0 ? 1 : -1);
+}, { passive: true });
+$('#todayBtn').onclick = () => {
+  calMonth = new Date(new Date().setDate(1)).setHours(0, 0, 0, 0);
+  selDay = startOfDay(Date.now());
+  renderCalendar();
+};
+$('#dayList').onclick = e => {
+  const b = e.target.closest('[data-id]');
+  if (b) openSheet('edit', records.find(r => r.id === b.dataset.id));
+};
+$('#addBtn').onclick = () => {
+  const ts = selDay === startOfDay(Date.now()) ? Date.now() : new Date(selDay).setHours(12);
+  openSheet('add', { id: uid(), ts, bristol: null, feeling: null });
+};
+
+/* ---------- 数据 ---------- */
+
+let range = '7', pick = null; // pick：趋势图里点选的柱子
+$('#range').onclick = e => {
+  const b = e.target.closest('[data-r]');
+  if (b) { range = b.dataset.r; pick = null; renderData(); }
+};
+$('#trend').onclick = e => {
+  const c = e.target.closest('[data-i]');
+  if (c) { pick = pick === +c.dataset.i ? null : +c.dataset.i; renderData(); }
+};
+
+const niceMax = m => (m <= 2 ? 2 : m <= 4 ? 4 : Math.ceil(m / 2) * 2);
+function barChart(items, sel) {
+  const top = niceMax(Math.max(...items.map(x => x.n)));
+  const cols = items.map((x, i) =>
+    `<div class="col${sel != null && sel !== i ? ' dim' : ''}" data-i="${i}"><i style="height:${x.n / top * 100}%"></i></div>`).join('');
+  return `<div class="chart"><div class="plot-wrap">
+      <div class="grid-lines"><span data-v="${top}"></span><span data-v="${top / 2}"></span><span data-v="0"></span></div>
+      <div class="plot">${cols}</div></div>
+    <div class="xlabels">${items.map(x => `<span>${x.label}</span>`).join('')}</div></div>`;
+}
+function stack(items, total) {
+  return `<div class="stack">${items.map(x => (x.n ? `<i style="flex:${x.n};background:${x.color}"></i>` : '')).join('')}</div>
+    <div class="legend">${items.map(x => `<span><b style="background:${x.color}"></b>${x.label}<em>${pct(x.n, total)}</em></span>`).join('')}</div>`;
+}
+
+function renderData() {
+  document.querySelectorAll('#range [data-r]').forEach(b => b.setAttribute('aria-pressed', b.dataset.r === range));
+  const now = Date.now(), today = startOfDay(now);
+
+  // 分桶：天或月
+  let start, buckets;
+  if (range === '12m') {
+    const d = new Date(today);
+    start = new Date(d.getFullYear(), d.getMonth() - 11, 1).getTime();
+    buckets = Array.from({ length: 12 }, (_, i) => {
+      const t = new Date(d.getFullYear(), d.getMonth() - 11 + i, 1).getTime();
+      return { t, label: new Date(t).getMonth() + 1, full: ym(t), n: 0 };
+    });
+  } else {
+    const len = +range;
+    start = addDays(today, 1 - len);
+    buckets = Array.from({ length: len }, (_, i) => {
+      const t = addDays(start, i), d = new Date(t);
+      return { t, label: len === 7 ? WEEK[d.getDay()] : (len - 1 - i) % 7 ? '' : d.getDate(), full: `${md(t)} 星期${WEEK[d.getDay()]}`, n: 0 };
+    });
+  }
+  const inRange = records.filter(r => r.ts >= start && r.ts <= now);
+  for (const r of inRange) {
+    let i = buckets.length - 1;
+    while (buckets[i].t > r.ts) i--;
+    buckets[i].n++;
+  }
+
+  // 趋势
+  const total = inRange.length;
+  const effStart = records.length ? Math.max(start, startOfDay(records[0].ts)) : today;
+  const days = Math.round((today - effStart) / 864e5) + 1;
+  const rangeText = range === '12m' ? `${ym(start)} – ${ym(today)}` : `${md(start)} – ${md(today)}`;
+  $('#trendHead').innerHTML = pick != null
+    ? chartHead(range === '12m' ? '当月合计' : '当日合计', metric([[buckets[pick].n, '次']]), buckets[pick].full)
+    : chartHead('日均', total ? metric([[(total / days).toFixed(1), '次']]) : null, rangeText);
+  $('#trend').innerHTML = barChart(buckets, pick);
+
+  // 概览
+  let gap = 0;
+  for (let i = 1; i < inRange.length; i++) gap = Math.max(gap, inRange[i].ts - inRange[i - 1].ts);
+  const activeDays = new Set(inRange.map(r => startOfDay(r.ts))).size;
+  const last = records.at(-1);
+  const row = (k, v) => `<li><div class="row"><span>${k}</span><span class="value">${v}</span></div></li>`;
+  $('#summary').innerHTML =
+    row('总次数', `${total}次`) +
+    row('有记录的天数', `${activeDays}/${days}天`) +
+    row('距上一次', last ? plain(since(now - last.ts)) : '—') +
+    row('最长间隔', gap ? plain(since(gap)) : '—');
+
+  // 时段
+  const hours = Array.from({ length: 24 }, (_, h) => ({ label: h % 6 ? '' : h, n: 0 }));
+  for (const r of inRange) hours[new Date(r.ts).getHours()].n++;
+  const peak = hours.reduce((p, x, h) => (x.n > hours[p].n ? h : p), 0);
+  $('#hoursHead').innerHTML = chartHead('最常见时段', total ? `${peak}:00 – ${peak + 1}:00` : null, `基于 ${total} 次记录`);
+  $('#hours').innerHTML = barChart(hours, total ? peak : null);
+
+  // 形状
+  const withB = inRange.filter(r => r.bristol);
+  const groups = GROUPS.map(g => ({ ...g, label: g.name, n: withB.filter(r => g.types.includes(r.bristol)).length }));
+  const main = groups.reduce((a, b) => (b.n > a.n ? b : a));
+  $('#shapeHead').innerHTML = chartHead('形状',
+    withB.length ? `<span style="color:${main.color}">${main.name}</span>` : null,
+    withB.length ? `以 ${main.range}为主 · ${withB.length} 条有形状的记录` : '在记录详情里选择形状后显示');
+  const typeRows = BRISTOL.slice(1).map(([name], i) => {
+    const n = withB.filter(r => r.bristol === i + 1).length;
+    return `<li class="${n ? '' : 'muted'}"><span class="badge sm" style="background:${groupOf(i + 1).color}">${i + 1}</span><span>${name}</span>
+      <span class="value">${n}<small>${pct(n, withB.length)}</small></span></li>`;
+  }).join('');
+  $('#shapeBody').innerHTML = stack(groups, withB.length) + `<ul class="mini">${typeRows}</ul>` +
+    (withB.length && main.tip ? `<p class="card-note">${main.tip}</p>` : '');
+
+  // 体感
+  const withF = inRange.filter(r => r.feeling);
+  const feels = Object.entries(FEELING).map(([k, v]) => ({ label: v, color: FEEL_COLOR[k], n: withF.filter(r => r.feeling === k).length }));
+  const topF = feels.reduce((a, b) => (b.n > a.n ? b : a));
+  $('#feelHead').innerHTML = chartHead('体感',
+    withF.length ? `<span style="color:${topF.color}">${topF.label}</span><small>${pct(topF.n, withF.length)}</small>` : null,
+    withF.length ? `${withF.length} 条有体感的记录` : '在记录详情里选择体感后显示');
+  $('#feelBody').innerHTML = stack(feels, withF.length);
+}
+
+/* ---------- 备份 ---------- */
+
+$('#exportBtn').onclick = async () => {
+  const d = new Date();
+  const name = `bianji-backup-${d.getFullYear()}${pad(d.getMonth() + 1)}${pad(d.getDate())}.json`;
+  const file = new File([JSON.stringify({ app: 'bianji', version: 1, exportedAt: d.toISOString(), records })], name, { type: 'application/json' });
+  // 手机上优先用系统分享（iOS 可“存储到文件”），否则直接下载
+  if (navigator.maxTouchPoints && navigator.canShare?.({ files: [file] })) {
+    try { await navigator.share({ files: [file] }); } catch {}
+    return;
+  }
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(file);
+  a.download = name;
+  a.click();
+  setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+};
+$('#importBtn').onclick = () => $('#importFile').click();
+$('#importFile').onchange = async e => {
+  const f = e.target.files[0];
+  e.target.value = '';
+  if (!f) return;
+  try {
+    const data = JSON.parse(await f.text());
+    const list = (Array.isArray(data) ? data : data.records).filter(r => r && typeof r.id === 'string' && Number.isFinite(r.ts));
+    const have = new Set(records.map(r => r.id));
+    const fresh = list.filter(r => !have.has(r.id)).map(r => ({
+      id: r.id, ts: r.ts,
+      bristol: Number.isInteger(r.bristol) && r.bristol >= 1 && r.bristol <= 7 ? r.bristol : null,
+      feeling: Object.hasOwn(FEELING, r.feeling) ? r.feeling : null,
+    }));
+    records.push(...fresh);
+    save();
+    render();
+    alert(`导入完成：新增 ${fresh.length} 条，跳过重复 ${list.length - fresh.length} 条。`);
+  } catch {
+    alert('无法读取这个文件，请选择便记导出的备份文件。');
+  }
+};
+
+/* ---------- 启动 ---------- */
+
+route();
+if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js');
