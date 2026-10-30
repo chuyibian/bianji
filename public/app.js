@@ -1,6 +1,6 @@
 'use strict';
 
-const VERSION = 'v10'; // 发布时与 sw.js 里的 CACHE 一起加一
+const VERSION = 'v11'; // 发布时与 sw.js 里的 CACHE 一起加一
 const KEY = 'bianji.records.v1';
 const BRISTOL = [null,
   ['分离硬块', '便秘'], ['结块香肠状', '轻度便秘'], ['表面有裂纹', '正常'], ['光滑柔软', '理想'],
@@ -34,7 +34,7 @@ function load() {
 function save() {
   records.sort((a, b) => a.ts - b.ts);
   localStorage.setItem(KEY, JSON.stringify(records));
-  syncPush().catch(() => {}); // 最后一次记录的时间变了，告诉推送服务器
+  syncPush().catch(err => syncLater(err)); // 最后一次记录的时间变了，告诉推送服务器
 }
 function upsert(rec) {
   const i = records.findIndex(r => r.id === rec.id);
@@ -434,17 +434,20 @@ const savePush = () => localStorage.setItem(PUSH_KEY, JSON.stringify(push));
 const timeout = (p, ms, msg) => Promise.race([p, new Promise((_, rej) => setTimeout(() => rej(new Error(msg)), ms))]);
 const setPushStatus = (text, bad = false) => { const el = $('#pushStatus'); el.textContent = text; el.classList.toggle('bad', bad); };
 
-async function pushApi(method, path, body) {
+// 不设 Content-Type 的 POST 属于“简单请求”，浏览器不发预检，一次连接完成；网络抖动时自动再试一次
+async function pushApi(path, body) {
   let res;
-  try {
-    res = await timeout(fetch(PUSH_API + path, { method, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) }),
-      10e3, '连接提醒服务器超时（10 秒）');
-  } catch (err) {
-    throw new Error(err.message.includes('超时') ? err.message : `连不上提醒服务器（${err.message}）`);
+  for (let i = 0; !res; i++) {
+    try {
+      res = await timeout(fetch(PUSH_API + path, { method: 'POST', body: JSON.stringify(body) }), 12e3, '连接提醒服务器超时（12 秒）');
+    } catch (err) {
+      if (i) throw new Error(err.message.includes('超时') ? err.message : `连不上提醒服务器（${err.message}）`);
+    }
   }
   if (!res.ok) throw new Error(`提醒服务器返回 ${res.status}`);
   return res.json();
 }
+const syncLater = err => setPushStatus(`已开启，但还没和提醒服务器同步：${err.message}。每次打开 app 都会自动重试`, true);
 const getSub = async () => (await timeout(navigator.serviceWorker.ready, 5e3, '后台服务未就绪，请重新打开 app')).pushManager.getSubscription();
 
 // 把订阅和最后一次记录时间同步到服务器；内容没变就不发（离线失败的话下次打开再同步）
@@ -455,7 +458,7 @@ async function syncPush(force = false) {
   const body = { subscription: sub.toJSON(), last: records.at(-1)?.ts ?? null, days: push.days || 2, tz: new Date().getTimezoneOffset() };
   const sig = JSON.stringify(body);
   if (!force && sig === push.synced) return;
-  await pushApi('PUT', '/sub', body);
+  await pushApi('/sub', body);
   push.synced = sig;
   savePush();
   setPushStatus(`已开启 · ${when(Date.now())} 与提醒服务器同步`);
@@ -480,13 +483,15 @@ $('#pushToggle').onchange = async e => {
       const b64 = VAPID_PUBLIC.replace(/-/g, '+').replace(/_/g, '/');
       await timeout(reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: Uint8Array.from(atob(b64), c => c.charCodeAt(0)) }),
         15e3, '向 Apple 注册推送超时（15 秒）');
-      setPushStatus('③ 正在连接提醒服务器…');
+      // 已经向 Apple 注册成功：开关保持打开；服务器这次连不上也没关系，之后会自动重试
       push = { on: true, days: push.days || 2 };
-      await syncPush(true);
+      savePush();
+      setPushStatus('③ 正在连接提醒服务器…');
+      await syncPush(true).catch(syncLater);
     } else {
       const sub = await getSub();
       if (sub) {
-        pushApi('DELETE', '/sub', { endpoint: sub.endpoint }).catch(() => {});
+        pushApi('/unsub', { endpoint: sub.endpoint }).catch(() => {});
         await sub.unsubscribe();
       }
       push = { days: push.days };
@@ -507,7 +512,7 @@ $('#pushDays').onclick = e => {
   push.days = +b.dataset.d;
   savePush();
   renderPush();
-  syncPush().catch(() => {});
+  syncPush().catch(syncLater);
 };
 $('#pushTest').onclick = async () => {
   const btn = $('#pushTest');
@@ -515,7 +520,7 @@ $('#pushTest').onclick = async () => {
   try {
     setPushStatus('正在发送测试通知…');
     await syncPush(true);
-    await pushApi('POST', '/test', { endpoint: (await getSub()).endpoint });
+    await pushApi('/test', { endpoint: (await getSub()).endpoint });
     btn.textContent = '已发送，请留意通知';
     setPushStatus(`测试通知已由服务器发出（${when(Date.now())}）`);
   } catch (err) {
@@ -528,8 +533,9 @@ $('#pushTest').onclick = async () => {
 /* ---------- 启动 ---------- */
 
 route();
-if (push.on) setPushStatus('已开启');
-syncPush().catch(err => setPushStatus(`已开启，但暂时没同步上：${err.message}。联网后会自动重试`, true));
+if (push.on) setPushStatus(push.synced ? '已开启 · 已与提醒服务器同步' : '已开启 · 正在同步…');
+syncPush().catch(syncLater);
+document.addEventListener('visibilitychange', () => { if (!document.hidden) syncPush().catch(syncLater); });
 if ('serviceWorker' in navigator) {
   const hadController = !!navigator.serviceWorker.controller;
   navigator.serviceWorker.register('sw.js').then(reg => {

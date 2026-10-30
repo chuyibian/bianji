@@ -1,6 +1,6 @@
 // 网络优先：在线时总是向服务器确认最新版本（绕过浏览器 HTTP 缓存），
 // 3 秒内没拿到或离线时退回本地缓存。每次发布只需把版本号加一。
-const CACHE = 'bianji-v10';
+const CACHE = 'bianji-v11';
 const ASSETS = [
   './', 'index.html', 'style.css', 'app.js', 'manifest.webmanifest',
   'icons/icon.svg', 'icons/cat.svg', 'icons/icon-192.png', 'icons/icon-512.png', 'icons/apple-touch-icon.png',

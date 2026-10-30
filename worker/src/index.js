@@ -22,14 +22,17 @@ export default {
     const json = (data, status = 200) => Response.json(data, { status, headers });
     const path = new URL(req.url).pathname;
 
+    // App 用不带 Content-Type 的 POST（浏览器不需要先发预检请求，一次连接完成）；
+    // 旧版的 PUT / DELETE 仍然兼容
+    const route = `${req.method} ${path}`;
     try {
-      const body = await req.json();
+      const body = JSON.parse(await req.text());
       const endpoint = body.subscription?.endpoint || body.endpoint;
       if (!/^https:\/\//.test(endpoint || '')) return json({ error: 'bad endpoint' }, 400);
       const key = await keyOf(endpoint);
 
       // 登记或更新：订阅、最后一次记录时间、提醒天数、时区偏移（分钟，与 getTimezoneOffset 相同）
-      if (path === '/sub' && req.method === 'PUT') {
+      if (route === 'POST /sub' || route === 'PUT /sub') {
         const sub = body.subscription;
         if (!sub?.keys?.p256dh || !sub?.keys?.auth) return json({ error: 'bad subscription' }, 400);
         const old = await env.SUBS.get(key, 'json');
@@ -42,11 +45,11 @@ export default {
         }));
         return json({ ok: true });
       }
-      if (path === '/sub' && req.method === 'DELETE') {
+      if (route === 'POST /unsub' || route === 'DELETE /sub') {
         await env.SUBS.delete(key);
         return json({ ok: true });
       }
-      if (path === '/test' && req.method === 'POST') {
+      if (route === 'POST /test') {
         const rec = await env.SUBS.get(key, 'json');
         if (!rec) return json({ error: 'not subscribed' }, 404);
         const res = await sendPush(rec.sub, { title: '便记', body: '测试通知：推送提醒已经开好了 💩' }, vapidOf(env));
