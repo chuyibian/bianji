@@ -1,6 +1,6 @@
 'use strict';
 
-const VERSION = 'v9'; // 发布时与 sw.js 里的 CACHE 一起加一
+const VERSION = 'v10'; // 发布时与 sw.js 里的 CACHE 一起加一
 const KEY = 'bianji.records.v1';
 const BRISTOL = [null,
   ['分离硬块', '便秘'], ['结块香肠状', '轻度便秘'], ['表面有裂纹', '正常'], ['光滑柔软', '理想'],
@@ -430,12 +430,22 @@ const PUSH_KEY = 'bianji.push';
 let push = (() => { try { return JSON.parse(localStorage.getItem(PUSH_KEY)) || {}; } catch { return {}; } })();
 const savePush = () => localStorage.setItem(PUSH_KEY, JSON.stringify(push));
 
+// 每一步都有超时，卡住时能看到停在哪一步，而不是一直没反应
+const timeout = (p, ms, msg) => Promise.race([p, new Promise((_, rej) => setTimeout(() => rej(new Error(msg)), ms))]);
+const setPushStatus = (text, bad = false) => { const el = $('#pushStatus'); el.textContent = text; el.classList.toggle('bad', bad); };
+
 async function pushApi(method, path, body) {
-  const res = await fetch(PUSH_API + path, { method, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
-  if (!res.ok) throw new Error(`服务器返回 ${res.status}`);
+  let res;
+  try {
+    res = await timeout(fetch(PUSH_API + path, { method, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) }),
+      10e3, '连接提醒服务器超时（10 秒）');
+  } catch (err) {
+    throw new Error(err.message.includes('超时') ? err.message : `连不上提醒服务器（${err.message}）`);
+  }
+  if (!res.ok) throw new Error(`提醒服务器返回 ${res.status}`);
   return res.json();
 }
-const getSub = async () => (await navigator.serviceWorker.ready).pushManager.getSubscription();
+const getSub = async () => (await timeout(navigator.serviceWorker.ready, 5e3, '后台服务未就绪，请重新打开 app')).pushManager.getSubscription();
 
 // 把订阅和最后一次记录时间同步到服务器；内容没变就不发（离线失败的话下次打开再同步）
 async function syncPush(force = false) {
@@ -448,6 +458,7 @@ async function syncPush(force = false) {
   await pushApi('PUT', '/sub', body);
   push.synced = sig;
   savePush();
+  setPushStatus(`已开启 · ${when(Date.now())} 与提醒服务器同步`);
 }
 
 function renderPush() {
@@ -462,10 +473,14 @@ $('#pushToggle').onchange = async e => {
   try {
     if (toggle.checked) {
       if (!('Notification' in window && 'PushManager' in window)) throw new Error('请先把便记添加到主屏幕，再从主屏幕图标打开后开启。');
+      setPushStatus('① 正在请求通知权限…');
       if (await Notification.requestPermission() !== 'granted') throw new Error('没有获得通知权限。可以在 iPhone 的 设置 → 通知 → 便记 里打开。');
-      const reg = await navigator.serviceWorker.ready;
+      setPushStatus('② 正在向 Apple 注册推送…');
+      const reg = await timeout(navigator.serviceWorker.ready, 5e3, '后台服务未就绪，请重新打开 app');
       const b64 = VAPID_PUBLIC.replace(/-/g, '+').replace(/_/g, '/');
-      await reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: Uint8Array.from(atob(b64), c => c.charCodeAt(0)) });
+      await timeout(reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: Uint8Array.from(atob(b64), c => c.charCodeAt(0)) }),
+        15e3, '向 Apple 注册推送超时（15 秒）');
+      setPushStatus('③ 正在连接提醒服务器…');
       push = { on: true, days: push.days || 2 };
       await syncPush(true);
     } else {
@@ -475,10 +490,12 @@ $('#pushToggle').onchange = async e => {
         await sub.unsubscribe();
       }
       push = { days: push.days };
+      setPushStatus('');
     }
   } catch (err) {
     push = { days: push.days };
-    alert(err.message || '开启失败，请稍后再试。');
+    setPushStatus(`开启失败：${err.message}`, true);
+    alert(`开启失败：${err.message}`);
   }
   savePush();
   toggle.disabled = false;
@@ -496,10 +513,13 @@ $('#pushTest').onclick = async () => {
   const btn = $('#pushTest');
   btn.disabled = true;
   try {
+    setPushStatus('正在发送测试通知…');
     await syncPush(true);
     await pushApi('POST', '/test', { endpoint: (await getSub()).endpoint });
     btn.textContent = '已发送，请留意通知';
+    setPushStatus(`测试通知已由服务器发出（${when(Date.now())}）`);
   } catch (err) {
+    setPushStatus(`发送失败：${err.message}`, true);
     alert(`发送失败：${err.message}`);
   }
   setTimeout(() => { btn.textContent = '发送测试通知'; btn.disabled = false; }, 3000);
@@ -508,7 +528,8 @@ $('#pushTest').onclick = async () => {
 /* ---------- 启动 ---------- */
 
 route();
-syncPush().catch(() => {});
+if (push.on) setPushStatus('已开启');
+syncPush().catch(err => setPushStatus(`已开启，但暂时没同步上：${err.message}。联网后会自动重试`, true));
 if ('serviceWorker' in navigator) {
   const hadController = !!navigator.serviceWorker.controller;
   navigator.serviceWorker.register('sw.js').then(reg => {

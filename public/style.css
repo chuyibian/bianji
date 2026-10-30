@@ -86,6 +86,9 @@ button.row:active { background: var(--press); }
 .switch:checked { background: var(--brand); }
 .switch:checked::before { transform: translateX(20px); }
 .switch:disabled { opacity: .5; }
+.push-status { color: var(--label); font-weight: 500; }
+.push-status:empty { display: none; }
+.push-status.bad { color: var(--red); }
 
 /* ---------- 首页 ---------- */
 #home { display: flex; flex-direction: column; min-height: calc(100dvh - env(safe-area-inset-top) - env(safe-area-inset-bottom)); padding-bottom: 0; }
