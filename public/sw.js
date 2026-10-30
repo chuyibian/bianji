@@ -1,6 +1,6 @@
 // 网络优先：在线时总是向服务器确认最新版本（绕过浏览器 HTTP 缓存），
 // 3 秒内没拿到或离线时退回本地缓存。每次发布只需把版本号加一。
-const CACHE = 'bianji-v8';
+const CACHE = 'bianji-v9';
 const ASSETS = [
   './', 'index.html', 'style.css', 'app.js', 'manifest.webmanifest',
   'icons/icon.svg', 'icons/cat.svg', 'icons/icon-192.png', 'icons/icon-512.png', 'icons/apple-touch-icon.png',
@@ -14,6 +14,18 @@ self.addEventListener('activate', e => e.waitUntil(
   caches.keys().then(keys => Promise.all(keys.filter(k => k !== CACHE).map(k => caches.delete(k))))
     .then(() => self.clients.claim())
 ));
+
+// 推送提醒：服务器发来的是 {title, body}
+self.addEventListener('push', e => {
+  const d = e.data ? e.data.json() : {};
+  e.waitUntil(self.registration.showNotification(d.title || '便记', {
+    body: d.body || '', icon: 'icons/icon-192.png', tag: 'bianji-reminder',
+  }));
+});
+self.addEventListener('notificationclick', e => {
+  e.notification.close();
+  e.waitUntil(self.clients.matchAll({ type: 'window' }).then(list => (list[0] ? list[0].focus() : self.clients.openWindow('./'))));
+});
 
 self.addEventListener('fetch', e => {
   if (e.request.method !== 'GET' || !e.request.url.startsWith(self.location.origin)) return;

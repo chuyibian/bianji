@@ -90,6 +90,15 @@
   <div class="card"><div id="feelHead" class="chart-head"></div><div id="feelBody"></div></div>
   <p class="footnote">统计仅供参考，不构成医疗建议。如有持续异常请就医。</p>
 
+  <div class="section-head"><span>提醒</span></div>
+  <ul class="card group">
+    <li><label class="row"><span>推送提醒</span><input type="checkbox" id="pushToggle" class="switch"></label></li>
+    <li id="pushDaysRow"><div class="row"><span>多久没记录时提醒</span>
+      <div id="pushDays" class="segmented compact"><button data-d="1">1天</button><button data-d="2">2天</button><button data-d="3">3天</button></div></div></li>
+    <li id="pushTestRow"><button id="pushTest" class="row link-row">发送测试通知</button></li>
+  </ul>
+  <p class="footnote">只在 9:00–22:00 之间提醒，每次断档只提醒一次。服务器只保存这台手机的推送地址和最后一次记录的时间。</p>
+
   <div class="section-head"><span>数据备份</span></div>
   <ul class="card group">
     <li><button id="exportBtn" class="row link-row">导出备份</button></li>

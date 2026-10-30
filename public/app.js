@@ -1,6 +1,6 @@
 'use strict';
 
-const VERSION = 'v8'; // 发布时与 sw.js 里的 CACHE 一起加一
+const VERSION = 'v9'; // 发布时与 sw.js 里的 CACHE 一起加一
 const KEY = 'bianji.records.v1';
 const BRISTOL = [null,
   ['分离硬块', '便秘'], ['结块香肠状', '轻度便秘'], ['表面有裂纹', '正常'], ['光滑柔软', '理想'],
@@ -34,6 +34,7 @@ function load() {
 function save() {
   records.sort((a, b) => a.ts - b.ts);
   localStorage.setItem(KEY, JSON.stringify(records));
+  syncPush().catch(() => {}); // 最后一次记录的时间变了，告诉推送服务器
 }
 function upsert(rec) {
   const i = records.findIndex(r => r.id === rec.id);
@@ -298,6 +299,7 @@ function stack(items, total) {
 }
 
 function renderData() {
+  renderPush();
   document.querySelectorAll('#range [data-r]').forEach(b => b.setAttribute('aria-pressed', b.dataset.r === range));
   const now = Date.now(), today = startOfDay(now);
 
@@ -419,9 +421,94 @@ $('#importFile').onchange = async e => {
   }
 };
 
+/* ---------- 推送提醒 ---------- */
+
+// 服务器只保存：推送订阅、最后一次记录的时间、提醒天数、时区。形状和体感不会上传。
+const PUSH_API = 'https://bianji-push.bianji-push.workers.dev';
+const VAPID_PUBLIC = 'BMU36_1cGY70V4RTbHTf6vFnj3y-MNRiKABt9iLCHbtt_ijSIWwatiPnHx_GkKNqzvx6zAuX__xXzpS5dj58nRo';
+const PUSH_KEY = 'bianji.push';
+let push = (() => { try { return JSON.parse(localStorage.getItem(PUSH_KEY)) || {}; } catch { return {}; } })();
+const savePush = () => localStorage.setItem(PUSH_KEY, JSON.stringify(push));
+
+async function pushApi(method, path, body) {
+  const res = await fetch(PUSH_API + path, { method, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+  if (!res.ok) throw new Error(`服务器返回 ${res.status}`);
+  return res.json();
+}
+const getSub = async () => (await navigator.serviceWorker.ready).pushManager.getSubscription();
+
+// 把订阅和最后一次记录时间同步到服务器；内容没变就不发（离线失败的话下次打开再同步）
+async function syncPush(force = false) {
+  if (!push.on) return;
+  const sub = await getSub();
+  if (!sub) { push = { days: push.days }; savePush(); return renderPush(); } // 通知权限被关掉了
+  const body = { subscription: sub.toJSON(), last: records.at(-1)?.ts ?? null, days: push.days || 2, tz: new Date().getTimezoneOffset() };
+  const sig = JSON.stringify(body);
+  if (!force && sig === push.synced) return;
+  await pushApi('PUT', '/sub', body);
+  push.synced = sig;
+  savePush();
+}
+
+function renderPush() {
+  $('#pushToggle').checked = !!push.on;
+  $('#pushDaysRow').hidden = $('#pushTestRow').hidden = !push.on;
+  document.querySelectorAll('#pushDays [data-d]').forEach(b => b.setAttribute('aria-pressed', +b.dataset.d === (push.days || 2)));
+}
+
+$('#pushToggle').onchange = async e => {
+  const toggle = e.target;
+  toggle.disabled = true;
+  try {
+    if (toggle.checked) {
+      if (!('Notification' in window && 'PushManager' in window)) throw new Error('请先把便记添加到主屏幕，再从主屏幕图标打开后开启。');
+      if (await Notification.requestPermission() !== 'granted') throw new Error('没有获得通知权限。可以在 iPhone 的 设置 → 通知 → 便记 里打开。');
+      const reg = await navigator.serviceWorker.ready;
+      const b64 = VAPID_PUBLIC.replace(/-/g, '+').replace(/_/g, '/');
+      await reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: Uint8Array.from(atob(b64), c => c.charCodeAt(0)) });
+      push = { on: true, days: push.days || 2 };
+      await syncPush(true);
+    } else {
+      const sub = await getSub();
+      if (sub) {
+        pushApi('DELETE', '/sub', { endpoint: sub.endpoint }).catch(() => {});
+        await sub.unsubscribe();
+      }
+      push = { days: push.days };
+    }
+  } catch (err) {
+    push = { days: push.days };
+    alert(err.message || '开启失败，请稍后再试。');
+  }
+  savePush();
+  toggle.disabled = false;
+  renderPush();
+};
+$('#pushDays').onclick = e => {
+  const b = e.target.closest('[data-d]');
+  if (!b) return;
+  push.days = +b.dataset.d;
+  savePush();
+  renderPush();
+  syncPush().catch(() => {});
+};
+$('#pushTest').onclick = async () => {
+  const btn = $('#pushTest');
+  btn.disabled = true;
+  try {
+    await syncPush(true);
+    await pushApi('POST', '/test', { endpoint: (await getSub()).endpoint });
+    btn.textContent = '已发送，请留意通知';
+  } catch (err) {
+    alert(`发送失败：${err.message}`);
+  }
+  setTimeout(() => { btn.textContent = '发送测试通知'; btn.disabled = false; }, 3000);
+};
+
 /* ---------- 启动 ---------- */
 
 route();
+syncPush().catch(() => {});
 if ('serviceWorker' in navigator) {
   const hadController = !!navigator.serviceWorker.controller;
   navigator.serviceWorker.register('sw.js').then(reg => {

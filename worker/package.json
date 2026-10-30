@@ -1,0 +1,9 @@
+{
+  "name": "bianji-push",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test": "node test/webpush.test.js",
+    "deploy": "npx wrangler@4 deploy"
+  }
+}

@@ -1,0 +1,16 @@
+name = "bianji-push"
+main = "src/index.js"
+compatibility_date = "2026-09-01"
+
+# 每 30 分钟检查一次是否需要提醒
+[triggers]
+crons = ["*/30 * * * *"]
+
+[vars]
+VAPID_PUBLIC = "BMU36_1cGY70V4RTbHTf6vFnj3y-MNRiKABt9iLCHbtt_ijSIWwatiPnHx_GkKNqzvx6zAuX__xXzpS5dj58nRo"
+VAPID_SUBJECT = "https://chuyibian.github.io/bianji/"
+# VAPID_PRIVATE_JWK 是密钥，用 wrangler secret put 设置，不写在这里
+
+[[kv_namespaces]]
+binding = "SUBS"
+id = "ebfb0e3803144abeabdddc4d512bb04f"

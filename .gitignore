@@ -1,3 +1,8 @@
 .DS_Store
 .claude/
 *.zip
+
+# 推送服务器
+worker/.vapid-private.json
+worker/.wrangler/
+node_modules/

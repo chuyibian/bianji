@@ -38,6 +38,25 @@ cd /Users/chuyibian/Projects/poop && git add -A && git commit -m "更新" && git
 | `public/` | 整个网站，没有构建步骤 |
 | `public/edgeone.json` | 只对 EdgeOne 有效，GitHub Pages 会忽略它 |
 
+## 推送提醒（Cloudflare Worker）
+
+- 服务器地址：https://bianji-push.bianji-push.workers.dev ，代码在 `worker/`，配置在 `worker/wrangler.toml`
+- 每 30 分钟检查一次：超过设定天数（1/2/3 天）没记录，就推送一次提醒，只在当地 9:00–22:00 发送
+- 服务器只保存：推送订阅、最后一次记录的时间、提醒天数、时区。数据存在 Cloudflare KV（命名空间 `SUBS`）
+- VAPID 私钥保存在 Cloudflare 的 secret `VAPID_PRIVATE_JWK` 里，本机备份在 `worker/.vapid-private.json`（已加入 .gitignore，不要提交）。如果私钥丢失，需要重新生成密钥对，并在手机上关掉再打开提醒
+
+修改服务器代码后，先跑测试再部署：
+
+```bash
+cd /Users/chuyibian/Projects/poop/worker && node test/webpush.test.js && npx wrangler@4 deploy
+```
+
+查看服务器实时日志（例如推送失败的原因）：
+
+```bash
+cd /Users/chuyibian/Projects/poop/worker && npx wrangler@4 tail
+```
+
 ## 免费额度
 
 站点空间 1GB，每月约 100GB 流量，个人使用远远够用。

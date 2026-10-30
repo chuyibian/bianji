@@ -78,6 +78,14 @@ button.row:active { background: var(--press); }
 .segmented { display: flex; background: var(--fill); border-radius: 9px; padding: 2px; margin-top: 4px; }
 .segmented button { flex: 1; height: 30px; border-radius: 7px; font-size: 13px; font-weight: 500; color: var(--label2); transition: background .2s, color .2s; }
 .segmented [aria-pressed=true] { background: #fff; color: var(--label); font-weight: 600; box-shadow: 0 3px 8px rgb(0 0 0 / .1), 0 1px 1px rgb(0 0 0 / .04); }
+.segmented.compact { margin: 0 0 0 auto; width: 150px; flex: none; }
+
+/* iOS 风格开关 */
+.switch { appearance: none; -webkit-appearance: none; margin: 0 0 0 auto; flex: none; position: relative; width: 51px; height: 31px; border-radius: 16px; background: var(--fill); cursor: pointer; transition: background .2s; }
+.switch::before { content: ""; position: absolute; top: 2px; left: 2px; width: 27px; height: 27px; border-radius: 50%; background: #fff; box-shadow: 0 3px 8px rgb(0 0 0 / .15), 0 1px 1px rgb(0 0 0 / .16); transition: transform .2s var(--ease); }
+.switch:checked { background: var(--brand); }
+.switch:checked::before { transform: translateX(20px); }
+.switch:disabled { opacity: .5; }
 
 /* ---------- 首页 ---------- */
 #home { display: flex; flex-direction: column; min-height: calc(100dvh - env(safe-area-inset-top) - env(safe-area-inset-bottom)); padding-bottom: 0; }
